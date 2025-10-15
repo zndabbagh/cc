@@ -86,3 +86,65 @@ async function fetchFillerSet() {
       }
     });
 
+    cache.fillerSet = fillerSet;
+  } catch(err) {
+    console.error("Filler fetch failed:", err);
+    cache.fillerSet = new Set(); // fallback empty
+  }
+  cache.lastFetch = Date.now();
+  return cache.fillerSet;
+}
+
+// Catalog handler — all episodes, mark filler
+builder.defineCatalogHandler(async () => {
+  const episodeCount = await fetchEpisodeCount();
+  const fillerSet = await fetchFillerSet();
+
+  const metas = [];
+  for (let ep = 1; ep <= episodeCount; ep++) {
+    const isFiller = fillerSet.has(ep);
+    metas.push({
+      id: `conan-ep-${ep}`,
+      type: "tv",
+      name: isFiller ? `Episode ${ep} (FILLER)` : `Episode ${ep}`,
+      poster: null,
+      description: `Detective Conan — Episode ${ep} — ${isFiller ? "Filler" : "Canon"}.`,
+      info: { episode: ep, season: 1 }
+    });
+    if(metas.length >= 1500) break; // avoid huge catalog
+  }
+  return { metas };
+});
+
+// Meta handler
+builder.defineMetaHandler(async (args) => {
+  const match = args.id.match(/^conan-ep-(\d+)$/);
+  if (!match) return { meta: null };
+
+  const ep = parseInt(match[1],10);
+  const fillerSet = await fetchFillerSet();
+  const isFiller = fillerSet.has(ep);
+
+  return {
+    meta: {
+      id: args.id,
+      type: "tv",
+      name: isFiller ? `Episode ${ep} (FILLER)` : `Episode ${ep}`,
+      poster: null,
+      description: `Detective Conan — Episode ${ep}. ${isFiller ? "Marked as FILLER" : "Canon / story episode"}.`,
+      streams: [],
+      extra: [
+        { name: "Episode", value: String(ep) },
+        { name: "IsFiller", value: String(isFiller) }
+      ]
+    }
+  };
+});
+
+// Start server immediately — lazy fetch ensures crash-proof
+const addonInterface = builder.getInterface();
+const PORT = process.env.PORT || 7000;
+require("http").createServer(addonInterface).listen(PORT, () => {
+  console.log(`Addon running on port ${PORT}. Manifest available at /manifest.json`);
+});
+
