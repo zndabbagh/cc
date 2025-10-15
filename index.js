@@ -2,22 +2,28 @@
 const { addonBuilder } = require("stremio-addon-sdk");
 const fillerSet = new Set(require("./filler.json"));
 
-const EPISODE_COUNT = 1200; // hardcoded total episodes
+const EPISODE_COUNT = 1200; // total episodes
+const PER_PAGE = 100; // number of episodes per catalog page
 
 const builder = new addonBuilder({
   id: "org.yourname.stremio.conan-filler",
-  version: "1.0.4",
+  version: "1.0.5",
   name: "Case Closed (Detective Conan) — All Episodes (Filler Marked)",
-  description: "All episodes, with filler marked in title. Crash-proof for Render.com",
+  description: "All episodes with filler marked. Pagination included for fast loading.",
   resources: ["catalog", "meta", "manifest"],
   types: ["tv"],
   idPrefixes: ["conan-ep-"]
 });
 
-// Catalog handler — all episodes, mark filler
-builder.defineCatalogHandler(async () => {
+// Catalog handler with pagination
+builder.defineCatalogHandler(async (args) => {
+  // Determine page number
+  const page = args.extra?.page ? parseInt(args.extra.page, 10) : 1;
+  const start = (page - 1) * PER_PAGE + 1;
+  const end = Math.min(start + PER_PAGE - 1, EPISODE_COUNT);
+
   const metas = [];
-  for (let ep = 1; ep <= EPISODE_COUNT; ep++) {
+  for (let ep = start; ep <= end; ep++) {
     const isFiller = fillerSet.has(ep);
     metas.push({
       id: `conan-ep-${ep}`,
@@ -27,8 +33,8 @@ builder.defineCatalogHandler(async () => {
       description: `Detective Conan — Episode ${ep} — ${isFiller ? "Filler" : "Canon"}.`,
       info: { episode: ep, season: 1 }
     });
-    if (metas.length >= 1500) break; // limit for performance
   }
+
   return { metas };
 });
 
@@ -54,7 +60,7 @@ builder.defineMetaHandler(async (args) => {
   };
 });
 
-// Start server immediately
+// Start server
 const addonInterface = builder.getInterface();
 const PORT = process.env.PORT || 7000;
 require("http").createServer(addonInterface).listen(PORT, () => {
