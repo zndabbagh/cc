@@ -9,9 +9,9 @@ const ANILIST_API = "https://graphql.anilist.co";
 
 const builder = new addonBuilder({
   id: "org.yourname.stremio.conan-filler",
-  version: "1.0.2",
+  version: "1.0.3",
   name: "Case Closed (Detective Conan) — All Episodes (Filler Marked)",
-  description: "Marks filler episodes in the title.",
+  description: "Marks filler episodes in the title. Crash-proof for cloud hosting.",
   resources: ["catalog", "meta", "manifest"],
   types: ["tv"],
   idPrefixes: ["conan-ep-"]
@@ -24,7 +24,7 @@ let cache = {
   lastFetch: 0
 };
 
-// Safe fetch for AniList episode count
+// Safe fetch for AniList episode count (lazy)
 async function fetchEpisodeCount() {
   try {
     if (cache.episodeCount && (Date.now() - cache.lastFetch < 10*60*1000)) return cache.episodeCount;
@@ -46,13 +46,13 @@ async function fetchEpisodeCount() {
     const episodes = json?.data?.Media?.episodes;
     if (episodes) cache.episodeCount = episodes;
   } catch (err) {
-    console.error("Failed to fetch AniList episode count:", err);
+    console.error("AniList fetch failed:", err);
   }
   cache.lastFetch = Date.now();
   return cache.episodeCount;
 }
 
-// Safe fetch for filler list
+// Safe fetch for filler list (lazy)
 async function fetchFillerSet() {
   try {
     if (cache.fillerSet.size > 0 && (Date.now() - cache.lastFetch < 10*60*1000)) return cache.fillerSet;
@@ -65,7 +65,7 @@ async function fetchFillerSet() {
       const txt = $(el).text().trim().toLowerCase();
       if (txt.includes("filler")) {
         let sib = $(el).next();
-        for (let j=0;j<10 && sib && sib.length;j++){
+        for (let j = 0; j < 10 && sib && sib.length; j++) {
           const tag = sib.get(0).tagName ? sib.get(0).tagName.toLowerCase() : "";
           if (tag.match(/^h[1-6]$/)) break;
           fillerText += $(sib).text() + "\n";
@@ -78,7 +78,7 @@ async function fetchFillerSet() {
     const ranges = fillerText.match(/\d+(\s*-\s*\d+)?/g);
     if (ranges) ranges.forEach(r => {
       if (r.includes("-")) {
-        const [a,b] = r.split("-").map(x=>parseInt(x.trim(),10));
+        const [a,b] = r.split("-").map(x => parseInt(x.trim(),10));
         for(let k=a;k<=b;k++) fillerSet.add(k);
       } else {
         const n = parseInt(r.trim(),10);
@@ -86,60 +86,3 @@ async function fetchFillerSet() {
       }
     });
 
-    cache.fillerSet = fillerSet;
-  } catch(err) {
-    console.error("Failed to fetch filler list:", err);
-  }
-  cache.lastFetch = Date.now();
-  return cache.fillerSet;
-}
-
-// Catalog handler — all episodes, mark filler
-builder.defineCatalogHandler(async () => {
-  const episodeCount = await fetchEpisodeCount();
-  const fillerSet = await fetchFillerSet();
-
-  const metas = [];
-  for (let ep=1; ep<=episodeCount; ep++){
-    const isFiller = fillerSet.has(ep);
-    metas.push({
-      id: `conan-ep-${ep}`,
-      type: "tv",
-      name: isFiller ? `Episode ${ep} (FILLER)` : `Episode ${ep}`,
-      poster: null,
-      description: `Detective Conan — Episode ${ep} — ${isFiller ? "Filler" : "Canon"}.`,
-      info: { episode: ep, season: 1 }
-    });
-    if(metas.length>=1500) break;
-  }
-  return { metas };
-});
-
-// Meta handler
-builder.defineMetaHandler(async (args) => {
-  const match = args.id.match(/^conan-ep-(\d+)$/);
-  if (!match) return { meta: null };
-  const ep = parseInt(match[1],10);
-  const fillerSet = await fetchFillerSet();
-  const isFiller = fillerSet.has(ep);
-  return {
-    meta: {
-      id: args.id,
-      type: "tv",
-      name: isFiller ? `Episode ${ep} (FILLER)` : `Episode ${ep}`,
-      poster: null,
-      description: `Detective Conan — Episode ${ep}. ${isFiller ? "Marked as FILLER" : "Canon / story episode"}.`,
-      streams: [],
-      extra: [
-        { name: "Episode", value: String(ep) },
-        { name: "IsFiller", value: String(isFiller) }
-      ]
-    }
-  };
-});
-
-const addonInterface = builder.getInterface();
-const PORT = process.env.PORT || 7000;
-require("http").createServer(addonInterface).listen(PORT, () => {
-  console.log(`Addon running on http://localhost:${PORT}/manifest.json`);
-});
