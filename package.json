@@ -1,17 +1,14 @@
-{
-  "name": "stremio-detective-conan-nonfiller",
-  "version": "1.0.0",
-  "description": "Stremio addon: Detective Conan (Case Closed) non-filler episode catalog (metadata only).",
+{{
+  "name": "conan-filler-addon",
+  "version": "1.0.4",
   "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "stremio-addon-sdk": "^1.5.0"
+  },
   "scripts": {
     "start": "node index.js"
-  },
-  "dependencies": {
-    "cheerio": "^1.0.0-rc.12",
-    "node-fetch": "^2.6.12",
-    "stremio-addon-sdk": "^0.5.10"
-  },
-  "engines": {
-    "node": ">=14"
   }
 }
+
+
